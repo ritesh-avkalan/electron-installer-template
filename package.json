@@ -12,6 +12,7 @@
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "firebase": "^12.15.0",
     "lucide-react": "^1.20.0",
     "react": "^19.2.6",
@@ -37,6 +38,13 @@
   "build": {
     "appId": "com.esd.desktop",
     "productName": "esd",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ritesh-avkalan",
+        "repo": "electron-installer-template"
+      }
+    ],
     "directories": {
       "output": "release"
     },

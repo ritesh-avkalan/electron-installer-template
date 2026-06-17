@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
@@ -224,8 +225,88 @@ app.on('activate', () => {
   }
 })
 
+let simulatedUpdateInterval: NodeJS.Timeout | null = null
+
+function setupAutoUpdater() {
+  ipcMain.on('check-for-updates', () => {
+    if (!win) return
+    
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdates().catch((err) => {
+        win?.webContents.send('update-status', 'error', err.message || err)
+      })
+    } else {
+      win.webContents.send('update-status', 'checking')
+      setTimeout(() => {
+        if (!win) return
+        const mockVersionInfo = {
+          version: '1.0.1',
+          releaseDate: new Date().toISOString(),
+          releaseNotes: 'Simulation Mode: Faster loading speeds, sleek new route protection wrappers, and update check dialog updates!'
+        }
+        win.webContents.send('update-status', 'update-available', mockVersionInfo)
+        
+        let progress = 0
+        if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
+        simulatedUpdateInterval = setInterval(() => {
+          if (!win) {
+            if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
+            return
+          }
+          progress += 20
+          win.webContents.send('update-status', 'download-progress', progress)
+          if (progress >= 100) {
+            if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
+            win.webContents.send('update-status', 'update-downloaded', mockVersionInfo)
+          }
+        }, 800)
+      }, 1500)
+    }
+  })
+
+  ipcMain.on('install-update', () => {
+    if (app.isPackaged) {
+      autoUpdater.quitAndInstall()
+    } else {
+      console.log('Simulation: Relaunching application...')
+      app.relaunch()
+      app.exit(0)
+    }
+  })
+
+  if (app.isPackaged) {
+    autoUpdater.autoDownload = false
+
+    autoUpdater.on('checking-for-update', () => {
+      win?.webContents.send('update-status', 'checking')
+    })
+
+    autoUpdater.on('update-available', (info) => {
+      win?.webContents.send('update-status', 'update-available', info)
+      autoUpdater.downloadUpdate()
+    })
+
+    autoUpdater.on('update-not-available', (info) => {
+      win?.webContents.send('update-status', 'update-not-available', info)
+    })
+
+    autoUpdater.on('error', (err) => {
+      win?.webContents.send('update-status', 'error', err.message || err)
+    })
+
+    autoUpdater.on('download-progress', (progressObj) => {
+      win?.webContents.send('update-status', 'download-progress', progressObj.percent)
+    })
+
+    autoUpdater.on('update-downloaded', (info) => {
+      win?.webContents.send('update-status', 'update-downloaded', info)
+    })
+  }
+}
+
 app.whenReady().then(() => {
   setupMenu()
+  setupAutoUpdater()
   
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(path.join(__dirname, 'logo-2.png'))
