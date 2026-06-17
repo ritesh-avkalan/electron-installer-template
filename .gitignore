@@ -22,7 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Electron build and release outputs
 /release
+/dist-electron
+/dist
+*.tsbuildinfo
 
 # Environment variables
 .env
