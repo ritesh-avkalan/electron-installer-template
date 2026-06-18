@@ -180,15 +180,16 @@ async function createWindow() {
     }
   }
 
+  const iconPath = path.join(__dirname, 'icons/esd.svg')
   win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
     minHeight: 600,
     title: 'ESD',
-    icon: path.join(__dirname, 'icons/esd.svg'),
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -309,7 +310,10 @@ app.whenReady().then(() => {
   setupAutoUpdater()
   
   if (process.platform === 'darwin' && app.dock) {
-    app.dock.setIcon(path.join(__dirname, 'logo-2.png'))
+    const iconPath = path.join(__dirname, 'logo-2.png')
+    if (fs.existsSync(iconPath)) {
+      app.dock.setIcon(iconPath)
+    }
   }
   
   createWindow()

@@ -131,7 +131,7 @@ export const LoginScreen: React.FC = () => {
                   <ArrowLeft size={16} /> Back
                 </button>
                 <h1 className="login-title" style={{ fontSize: '1.75rem', marginTop: '8px' }}>Sign in to ESD</h1>
-                <p className="login-subtitle">Enter your account credentials to view and manage projects.</p>
+                <p className="login-subtitle">Please Enter your account credentials to view and manage projects.</p>
               </div>
 
               <form onSubmit={handleEmailLogin} className="email-form">
