@@ -83,7 +83,7 @@ export const LoginScreen: React.FC = () => {
           {mode === 'welcome' && (
             <>
               <div className="login-header-group">
-                <h1 className="login-title">Welcome to ESD</h1>
+                <h1 className="login-title">Welcome to eigenspacedesign</h1>
                 <p className="login-subtitle">
                   ESD is a seamless way to contribute to projects on ESD. Sign in below to get started with your existing projects.
                 </p>
