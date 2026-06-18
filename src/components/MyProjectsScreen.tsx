@@ -41,31 +41,46 @@ export const MyProjectsScreen: React.FC = () => {
   
   // Update state variables
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'>('idle');
-  const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>('');
 
   useEffect(() => {
+    if (window.electronAPI && window.electronAPI.getAppVersion) {
+      window.electronAPI.getAppVersion().then(setAppVersion);
+    }
+
     if (window.electronAPI && window.electronAPI.onUpdateStatus) {
       const unsubscribe = window.electronAPI.onUpdateStatus((status, info) => {
         if (status === 'checking') {
           setUpdateStatus('checking');
-          setShowUpdateModal(true);
         } else if (status === 'update-available') {
           setUpdateStatus('available');
-          setUpdateInfo(info);
+          if (window.Notification) {
+            new window.Notification('Update Available', {
+              body: `Version ${info?.version || '1.0.1'} is available and downloading in the background.`
+            });
+          }
         } else if (status === 'update-not-available') {
           setUpdateStatus('not-available');
-          setTimeout(() => setShowUpdateModal(false), 2500);
+          setTimeout(() => {
+            setUpdateStatus('idle');
+          }, 3000);
         } else if (status === 'download-progress') {
           setUpdateStatus('downloading');
           setDownloadProgress(typeof info === 'number' ? Math.round(info) : 0);
         } else if (status === 'update-downloaded') {
           setUpdateStatus('downloaded');
-          setUpdateInfo(info);
+          if (window.Notification) {
+            new window.Notification('Update Ready to Install', {
+              body: `Version ${info?.version || '1.0.1'} has been downloaded. Click "Ready to Install" to restart.`
+            });
+          }
         } else if (status === 'error') {
+          console.error('Update check failed:', info);
           setUpdateStatus('error');
-          setUpdateInfo({ error: info });
+          setTimeout(() => {
+            setUpdateStatus('idle');
+          }, 4000);
         }
       });
       return unsubscribe;
@@ -73,8 +88,14 @@ export const MyProjectsScreen: React.FC = () => {
   }, []);
 
   const handleCheckForUpdates = () => {
+    if (updateStatus === 'downloaded') {
+      handleInstallUpdate();
+      return;
+    }
+    if (updateStatus === 'checking' || updateStatus === 'downloading') {
+      return;
+    }
     if (window.electronAPI && window.electronAPI.checkForUpdates) {
-      setShowUpdateModal(true);
       setUpdateStatus('checking');
       window.electronAPI.checkForUpdates();
     }
@@ -85,6 +106,61 @@ export const MyProjectsScreen: React.FC = () => {
       window.electronAPI.installUpdate();
     }
   };
+
+  const updateButtonConfig = useMemo(() => {
+    switch (updateStatus) {
+      case 'checking':
+        return {
+          text: 'Checking...',
+          className: 'btn btn-update btn-block',
+          style: { gap: '10px', cursor: 'not-allowed', opacity: 0.7 } as React.CSSProperties,
+          icon: <RefreshCw size={16} style={{ animation: 'rotate-orbit 1.2s linear infinite' }} />
+        };
+      case 'available':
+        return {
+          text: 'Update Available',
+          className: 'btn btn-primary btn-block',
+          style: { gap: '10px' } as React.CSSProperties,
+          icon: <RefreshCw size={16} />
+        };
+      case 'downloading':
+        return {
+          text: `Downloading (${downloadProgress}%)`,
+          className: 'btn btn-primary btn-block',
+          style: { gap: '10px', cursor: 'not-allowed', opacity: 0.9 } as React.CSSProperties,
+          icon: <RefreshCw size={16} style={{ animation: 'rotate-orbit 1.2s linear infinite' }} />
+        };
+      case 'downloaded':
+        return {
+          text: 'Ready to Install',
+          className: 'btn btn-primary btn-block',
+          style: { gap: '10px' } as React.CSSProperties,
+          icon: <Download size={16} />
+        };
+      case 'not-available':
+        return {
+          text: 'Up to Date',
+          className: 'btn btn-outline btn-block',
+          style: { gap: '10px', borderColor: 'var(--success-color)', color: 'var(--success-color)', cursor: 'default' } as React.CSSProperties,
+          icon: <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2.5" fill="none"><polyline points="20 6 9 17 4 12" /></svg>
+        };
+      case 'error':
+        return {
+          text: 'Failed to fetch',
+          className: 'btn btn-outline btn-block',
+          style: { gap: '10px', borderColor: 'var(--danger-color)', color: 'var(--danger-color)' } as React.CSSProperties,
+          icon: <X size={16} />
+        };
+      case 'idle':
+      default:
+        return {
+          text: 'Check for Updates',
+          className: 'btn btn-update btn-block',
+          style: { gap: '10px' } as React.CSSProperties,
+          icon: <RefreshCw size={16} />
+        };
+    }
+  }, [updateStatus, downloadProgress]);
 
   // Form State for new project
   const [newProjectName, setNewProjectName] = useState('');
@@ -176,7 +252,14 @@ export const MyProjectsScreen: React.FC = () => {
         <div className="sidebar-header">
           <div className="brand-section">
             <img src="/esd.svg" style={{ width: '32px', height: '32px' }} alt="ESD Logo" />
-            <span className="brand-name">ESD Desktop</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="brand-name">ESD Desktop</span>
+              {appVersion && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  v{appVersion}
+                </span>
+              )}
+            </div>
           </div>
 
           <nav className="sidebar-menu">
@@ -205,9 +288,14 @@ export const MyProjectsScreen: React.FC = () => {
               </div>
             </div>
           )}
-          <button className="btn btn-update btn-block" onClick={handleCheckForUpdates} style={{ gap: '10px' }}>
-            <RefreshCw size={16} />
-            <span>Check for Updates</span>
+          <button 
+            className={updateButtonConfig.className} 
+            onClick={handleCheckForUpdates} 
+            style={updateButtonConfig.style}
+            disabled={updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'not-available'}
+          >
+            {updateButtonConfig.icon}
+            <span>{updateButtonConfig.text}</span>
           </button>
           <button className="btn btn-outline btn-block" onClick={logout} style={{ gap: '10px' }}>
             <LogOut size={16} />
@@ -585,147 +673,6 @@ export const MyProjectsScreen: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* 5. Update Check Modal Overlay */}
-      {showUpdateModal && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center', padding: '30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>Application Update</span>
-              <button 
-                className="btn btn-ghost btn-icon" 
-                onClick={() => setShowUpdateModal(false)}
-                disabled={updateStatus === 'downloading' || updateStatus === 'checking'}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div style={{ margin: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-              {updateStatus === 'checking' && (
-                <>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    border: '3px solid var(--border-color)',
-                    borderTopColor: 'var(--accent-color)',
-                    borderRadius: '50%',
-                    animation: 'rotate-orbit 1s linear infinite'
-                  }} />
-                  <span style={{ fontWeight: 500 }}>Checking for updates...</span>
-                </>
-              )}
-
-              {updateStatus === 'not-available' && (
-                <>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    color: '#22c55e',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2.5" fill="none">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </div>
-                  <span style={{ fontWeight: 500 }}>You are on the latest version!</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>ESD Desktop is up to date.</span>
-                </>
-              )}
-
-              {updateStatus === 'available' && (
-                <>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    border: '3px solid var(--border-color)',
-                    borderTopColor: 'var(--accent-color)',
-                    borderRadius: '50%',
-                    animation: 'rotate-orbit 1s linear infinite'
-                  }} />
-                  <span style={{ fontWeight: 500 }}>New version {updateInfo?.version || '1.0.1'} found!</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Downloading update...</span>
-                </>
-              )}
-
-              {updateStatus === 'downloading' && (
-                <>
-                  <span style={{ fontWeight: 500 }}>Downloading update...</span>
-                  <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden', marginTop: '10px' }}>
-                    <div style={{ width: `${downloadProgress}%`, height: '100%', backgroundColor: 'var(--accent-color)', transition: 'width 0.3s ease' }} />
-                  </div>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{downloadProgress}% complete</span>
-                </>
-              )}
-
-              {updateStatus === 'downloaded' && (
-                <>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    color: '#3b82f6',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2.5" fill="none">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                    </svg>
-                  </div>
-                  <span style={{ fontWeight: 500 }}>Update ready to install!</span>
-                  {updateInfo?.releaseNotes && (
-                    <div style={{ 
-                      fontSize: '0.8rem', 
-                      color: 'var(--text-secondary)', 
-                      backgroundColor: 'rgba(255,255,255,0.03)', 
-                      padding: '10px', 
-                      borderRadius: '6px', 
-                      textAlign: 'left',
-                      maxHeight: '100px',
-                      overflowY: 'auto',
-                      width: '100%',
-                      border: '1px solid var(--border-color)'
-                    }}>
-                      <strong>Release Notes:</strong><br/>
-                      {updateInfo.releaseNotes}
-                    </div>
-                  )}
-                  <button className="btn btn-primary btn-block" onClick={handleInstallUpdate} style={{ marginTop: '10px' }}>
-                    Install & Restart
-                  </button>
-                </>
-              )}
-
-              {updateStatus === 'error' && (
-                <>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    color: '#ef4444',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <X size={24} />
-                  </div>
-                  <span style={{ fontWeight: 500 }}>Update failed</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', wordBreak: 'break-word', maxWidth: '100%' }}>
-                    {updateInfo?.error || 'An error occurred during update.'}
-                  </span>
-                </>
-              )}
-            </div>
           </div>
         </div>
       )}

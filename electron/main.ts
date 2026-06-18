@@ -229,6 +229,10 @@ app.on('activate', () => {
 let simulatedUpdateInterval: NodeJS.Timeout | null = null
 
 function setupAutoUpdater() {
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion()
+  })
+
   ipcMain.on('check-for-updates', () => {
     if (!win) return
     
@@ -240,27 +244,48 @@ function setupAutoUpdater() {
       win.webContents.send('update-status', 'checking')
       setTimeout(() => {
         if (!win) return
-        const mockVersionInfo = {
-          version: '1.0.1',
-          releaseDate: new Date().toISOString(),
-          releaseNotes: 'Simulation Mode: Faster loading speeds, sleek new route protection wrappers, and update check dialog updates!'
-        }
-        win.webContents.send('update-status', 'update-available', mockVersionInfo)
         
-        let progress = 0
-        if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
-        simulatedUpdateInterval = setInterval(() => {
-          if (!win) {
-            if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
-            return
+        const appVersion = app.getVersion()
+        const mockVersion = '1.0.1'
+        
+        const compareVersions = (v1: string, v2: string) => {
+          const p1 = v1.split('.').map(Number)
+          const p2 = v2.split('.').map(Number)
+          for (let i = 0; i < 3; i++) {
+            if ((p1[i] || 0) > (p2[i] || 0)) return 1
+            if ((p1[i] || 0) < (p2[i] || 0)) return -1
           }
-          progress += 20
-          win.webContents.send('update-status', 'download-progress', progress)
-          if (progress >= 100) {
-            if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
-            win.webContents.send('update-status', 'update-downloaded', mockVersionInfo)
+          return 0
+        }
+        
+        if (compareVersions(appVersion, mockVersion) >= 0) {
+          win.webContents.send('update-status', 'update-not-available', {
+            version: mockVersion,
+            releaseDate: new Date().toISOString()
+          })
+        } else {
+          const mockVersionInfo = {
+            version: mockVersion,
+            releaseDate: new Date().toISOString(),
+            releaseNotes: 'Simulation Mode: Faster loading speeds, sleek new route protection wrappers, and update check dialog updates!'
           }
-        }, 800)
+          win.webContents.send('update-status', 'update-available', mockVersionInfo)
+          
+          let progress = 0
+          if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
+          simulatedUpdateInterval = setInterval(() => {
+            if (!win) {
+              if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
+              return
+            }
+            progress += 20
+            win.webContents.send('update-status', 'download-progress', progress)
+            if (progress >= 100) {
+              if (simulatedUpdateInterval) clearInterval(simulatedUpdateInterval)
+              win.webContents.send('update-status', 'update-downloaded', mockVersionInfo)
+            }
+          }, 800)
+        }
       }, 1500)
     }
   })

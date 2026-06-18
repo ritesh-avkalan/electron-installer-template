@@ -6,6 +6,7 @@ interface Window {
     appName: string;
     checkForUpdates: () => void;
     installUpdate: () => void;
+    getAppVersion: () => Promise<string>;
     onUpdateStatus: (callback: (status: string, info: any) => void) => () => void;
   };
 }
